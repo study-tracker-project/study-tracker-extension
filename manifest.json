@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Study Tracker",
+  "version": "1.0.0",
+  "description": "브라우저 사용 시간을 측정해서 순공 시간을 계산합니다",
+
+  "permissions": [
+    "tabs",
+    "storage",
+    "alarms",
+    "idle"
+  ],
+
+  "host_permissions": [
+    "http://localhost:8080/*"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Study Tracker"
+  }
+}
