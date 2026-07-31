@@ -1,33 +1,22 @@
 // background.js
 const SERVER_URL = "http://localhost:8080";
 
-// 상태 변수
+// 탭 추적용 상태 (서비스워커 재시작 시 사라져도 무방 — 다음 탭 전환 때 다시 계산됨)
 let currentTab = null;
 let tabStartTime = null;
 let browserLogs = [];
-let deviceToken = null;
-let sessionId = null;
-let deviceId = null;
 
-// ── 초기화 ──────────────────────────────────────
-
-chrome.runtime.onInstalled.addListener(() => {
-    console.log("[Study Tracker] 설치 완료");
-    loadConfig();
-});
-
-chrome.runtime.onStartup.addListener(() => {
-    loadConfig();
-});
-
-async function loadConfig() {
-    const data = await chrome.storage.local.get([
-        "deviceToken", "sessionId", "deviceId"
-    ]);
-    deviceToken = data.deviceToken || null;
-    sessionId = data.sessionId || null;
-    deviceId = data.deviceId || null;
-    console.log("[설정] 로드 완료", { deviceToken: !!deviceToken, sessionId, deviceId });
+// ── 설정 조회 ──────────────────────────────────────
+// MV3 서비스워커는 유휴 상태에서 언제든 종료됐다가 재시작될 수 있고,
+// 이때 onInstalled/onStartup은 발생하지 않는다. 그래서 deviceToken 등을
+// 모듈 변수에 캐싱하지 않고, 필요할 때마다 매번 storage에서 읽는다.
+async function getConfig() {
+    const data = await chrome.storage.local.get(["deviceToken", "sessionId", "deviceId"]);
+    return {
+        deviceToken: data.deviceToken || null,
+        sessionId: data.sessionId || null,
+        deviceId: data.deviceId || null,
+    };
 }
 
 // ── 탭 추적 ──────────────────────────────────────
@@ -45,7 +34,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
     if (windowId === chrome.windows.WINDOW_ID_NONE) {
-        // 브라우저 포커스 잃음 → 현재 탭 로그 저장
         saveCurrentTabLog();
         currentTab = null;
         tabStartTime = null;
@@ -63,7 +51,6 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 function handleTabChange(tab) {
-    // 이전 탭 로그 저장
     saveCurrentTabLog();
 
     if (!tab.url || tab.url.startsWith("chrome://")) {
@@ -80,7 +67,7 @@ function saveCurrentTabLog() {
     if (!currentTab || !tabStartTime) return;
 
     const durationSec = Math.floor((new Date() - tabStartTime) / 1000);
-    if (durationSec < 3) return; // 3초 미만은 무시
+    if (durationSec < 3) return;
 
     const domain = extractDomain(currentTab.url);
     if (!domain) return;
@@ -95,6 +82,8 @@ function saveCurrentTabLog() {
     console.log(`[로그] ${domain} | ${durationSec}초 | 배치: ${browserLogs.length}개`);
 }
 
+// ── 알람 (1분마다 로그 전송 + 세션 동기화) ─────────────────
+
 chrome.alarms.create("sendLogs", { periodInMinutes: 1 });
 chrome.alarms.create("syncSession", { periodInMinutes: 1 });
 
@@ -107,24 +96,23 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-// 1분마다 주기적으로 현재 세션 ID 검색
 async function syncActiveSession() {
-    if (!deviceToken) return;
+    const config = await getConfig();
+    if (!config.deviceToken) return;
+
     try {
         const response = await fetch(`${SERVER_URL}/api/sessions/active`, {
-            headers: { "Authorization": `Bearer ${deviceToken}` }
+            headers: { "Authorization": `Bearer ${config.deviceToken}` }
         });
         if (response.ok) {
             const data = await response.json();
-            if (sessionId !== data.sessionId) {
-                sessionId = data.sessionId;
-                chrome.storage.local.set({ sessionId: data.sessionId });
-                console.log("[세션 동기화]", sessionId);
+            if (config.sessionId !== data.sessionId) {
+                await chrome.storage.local.set({ sessionId: data.sessionId });
+                console.log("[세션 동기화]", data.sessionId);
             }
         } else if (response.status === 400 || response.status === 404) {
-            if (sessionId) {
-                sessionId = null;
-                chrome.storage.local.set({ sessionId: null });
+            if (config.sessionId) {
+                await chrome.storage.local.set({ sessionId: null });
                 console.log("[세션 동기화] 활성 세션 없음");
             }
         }
@@ -151,11 +139,11 @@ function extractDomain(url) {
 // ── 서버 전송 ─────────────────────────────────────
 
 async function sendBrowserLogs() {
-    if (!browserLogs.length || !deviceToken || !sessionId || !deviceId) {
+    const config = await getConfig();
+    if (!browserLogs.length || !config.deviceToken || !config.sessionId || !config.deviceId) {
         return;
     }
 
-    // 현재 탭도 저장
     saveCurrentTabLog();
 
     const logsToSend = [...browserLogs];
@@ -166,11 +154,11 @@ async function sendBrowserLogs() {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${deviceToken}`
+                "Authorization": `Bearer ${config.deviceToken}`
             },
             body: JSON.stringify({
-                sessionId: parseInt(sessionId),
-                deviceId: parseInt(deviceId),
+                sessionId: parseInt(config.sessionId),
+                deviceId: parseInt(config.deviceId),
                 logs: logsToSend
             })
         });
@@ -179,51 +167,45 @@ async function sendBrowserLogs() {
             console.log(`[전송] ${logsToSend.length}개 브라우저 로그 전송 완료`);
         } else {
             console.error("[오류] 전송 실패:", response.status);
-            browserLogs = [...logsToSend, ...browserLogs]; // 실패 시 복구
+            browserLogs = [...logsToSend, ...browserLogs];
         }
     } catch (e) {
         console.error("[오류] 서버 연결 실패:", e);
-        browserLogs = [...logsToSend, ...browserLogs]; // 실패 시 복구
+        browserLogs = [...logsToSend, ...browserLogs];
     }
 }
-
-// ── 주기적 전송 (1분마다) ─────────────────────────
-
-chrome.alarms.create("sendLogs", { periodInMinutes: 1 });
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "sendLogs") {
-        sendBrowserLogs();
-    }
-});
 
 // ── 팝업으로부터 메시지 수신 ──────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "GET_STATUS") {
-        sendResponse({
-            isConnected: !!deviceToken,
-            sessionId: sessionId,
-            logCount: browserLogs.length
+        getConfig().then((config) => {
+            sendResponse({
+                isConnected: !!config.deviceToken,
+                sessionId: config.sessionId,
+                logCount: browserLogs.length
+            });
         });
+        return true;
     }
 
     if (message.type === "SAVE_CONFIG") {
-        deviceToken = message.deviceToken;
-        sessionId = message.sessionId;
-        deviceId = message.deviceId;
         chrome.storage.local.set({
             deviceToken: message.deviceToken,
             sessionId: message.sessionId,
             deviceId: message.deviceId
-        });
-        sendResponse({ success: true });
+        }).then(() => sendResponse({ success: true }));
+        return true;
     }
 
     if (message.type === "SEND_NOW") {
         sendBrowserLogs().then(() => sendResponse({ success: true }));
-        return true; // 비동기 응답
+        return true;
     }
 
     return true;
 });
+
+if (typeof module !== "undefined") {
+    module.exports = { extractDomain, getConfig };
+}
