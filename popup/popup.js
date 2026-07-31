@@ -1,21 +1,21 @@
 const SERVER_URL = "http://localhost:8080";
 
 document.addEventListener("DOMContentLoaded", async () => {
-    await refreshStatus();
-
-    document.getElementById("loginBtn").addEventListener("click", handleLogin);
+    document.getElementById("googleLoginBtn").addEventListener("click", handleGoogleLogin);
 
     const logoutBtn = document.getElementById("logoutBtn");
     if (logoutBtn) {
         logoutBtn.addEventListener("click", handleLogout);
     }
 
-    document.getElementById("sendBtn").addEventListener("click", async () => {
+    document.getElementById("sendBtn")?.addEventListener("click", async () => {
         const result = await chrome.runtime.sendMessage({ type: "SEND_NOW" });
         if (result.success) {
             document.getElementById("info").textContent = "전송 완료!";
         }
     });
+
+    await refreshStatus();
 });
 
 async function refreshStatus() {
@@ -40,34 +40,42 @@ async function refreshStatus() {
     }
 }
 
-async function handleLogin() {
-    const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value.trim();
+function getGoogleAccessToken() {
+    return new Promise((resolve, reject) => {
+        chrome.identity.getAuthToken({ interactive: true }, (token) => {
+            if (chrome.runtime.lastError || !token) {
+                reject(chrome.runtime.lastError || new Error("토큰을 받지 못했습니다."));
+                return;
+            }
+            resolve(token);
+        });
+    });
+}
+
+async function handleGoogleLogin() {
     const errorEl = document.getElementById("error");
     errorEl.textContent = "";
 
-    if (!email || !password) {
-        errorEl.textContent = "이메일과 비밀번호를 입력해주세요.";
-        return;
-    }
-
     try {
-        // 1. 로그인
-        const loginRes = await fetch(`${SERVER_URL}/api/auth/login`, {
+        // 1. Chrome이 관리하는 Google 계정으로 액세스 토큰 획득
+        const googleAccessToken = await getGoogleAccessToken();
+
+        // 2. 백엔드에 액세스 토큰 전달 → 우리 서비스 JWT 발급
+        const loginRes = await fetch(`${SERVER_URL}/api/auth/google/token`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password })
+            body: JSON.stringify({ accessToken: googleAccessToken })
         });
 
         if (!loginRes.ok) {
-            errorEl.textContent = "로그인 실패. 이메일/비밀번호를 확인해주세요.";
+            errorEl.textContent = "Google 로그인 실패.";
             return;
         }
 
         const loginData = await loginRes.json();
         const accessToken = loginData.accessToken;
 
-        // 2. device_token 발급
+        // 3. device_token 발급
         const deviceRes = await fetch(`${SERVER_URL}/api/auth/device`, {
             method: "POST",
             headers: {
@@ -87,17 +95,17 @@ async function handleLogin() {
 
         const deviceData = await deviceRes.json();
 
-        // 3. background.js에 저장 요청
+        // 4. background.js에 저장 요청
         await chrome.runtime.sendMessage({
             type: "SAVE_CONFIG",
             deviceToken: deviceData.deviceToken,
             deviceId: deviceData.deviceId,
-            sessionId: null  // 자동 동기화가 채워줄 예정
+            sessionId: null
         });
 
         await refreshStatus();
     } catch (e) {
-        errorEl.textContent = "서버 연결에 실패했어요.";
+        errorEl.textContent = "Google 로그인에 실패했어요.";
         console.error(e);
     }
 }
@@ -111,4 +119,8 @@ async function handleLogout() {
         sessionId: null
     });
     await refreshStatus();
+}
+
+if (typeof module !== "undefined") {
+    module.exports = { handleGoogleLogin, handleLogout, refreshStatus };
 }
