@@ -7,6 +7,12 @@ const listeners = {
 };
 
 global.chrome = {
+    identity: {
+        getAuthToken: (details, callback) => callback(undefined),
+        removeCachedAuthToken: (details, callback) => {
+            if (callback) callback();
+        },
+    },
     storage: {
         local: {
             get: (keys) =>

@@ -19,6 +19,9 @@ beforeEach(() => {
     global.chrome = {
         identity: {
             getAuthToken: jest.fn(),
+            removeCachedAuthToken: jest.fn((details, callback) => {
+                if (callback) callback();
+            }),
         },
         runtime: {
             sendMessage: jest.fn().mockResolvedValue({ success: true }),

@@ -68,6 +68,10 @@ async function handleGoogleLogin() {
         });
 
         if (!loginRes.ok) {
+            // 백엔드가 토큰을 거부한 경우, Chrome에 캐시된 액세스 토큰을 그대로 두면
+            // 재시도 때마다 같은(이미 거부된) 토큰이 재사용되어 항상 같은 이유로 실패한다.
+            // 캐시를 지워서 다음 로그인 시도가 새 토큰을 받을 수 있도록 한다. (완료를 기다리지 않음)
+            chrome.identity.removeCachedAuthToken({ token: googleAccessToken }, () => {});
             errorEl.textContent = "Google 로그인 실패.";
             return;
         }
@@ -110,7 +114,32 @@ async function handleGoogleLogin() {
     }
 }
 
+function getCachedGoogleAccessToken() {
+    return new Promise((resolve) => {
+        try {
+            chrome.identity.getAuthToken({ interactive: false }, (token) => {
+                // interactive: false일 때 캐시된 토큰이 없으면 chrome.runtime.lastError가
+                // 설정되거나 token이 비어있을 수 있다 — 로그아웃을 막지 않고 그냥 넘어간다.
+                if (chrome.runtime.lastError || !token) {
+                    resolve(null);
+                    return;
+                }
+                resolve(token);
+            });
+        } catch (e) {
+            resolve(null);
+        }
+    });
+}
+
 async function handleLogout() {
+    // Chrome이 캐싱한 OAuth 액세스 토큰도 함께 제거해야 로그아웃 후 다시 로그인할 때
+    // 계정 선택 화면이 뜨고, 다른 구글 계정으로 전환할 수 있다.
+    const cachedToken = await getCachedGoogleAccessToken();
+    if (cachedToken) {
+        chrome.identity.removeCachedAuthToken({ token: cachedToken }, () => {});
+    }
+
     await chrome.storage.local.clear();
     await chrome.runtime.sendMessage({
         type: "SAVE_CONFIG",
