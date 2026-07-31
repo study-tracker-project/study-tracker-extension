@@ -36,3 +36,26 @@ test("sendLogs 알람 리스너는 하나만 등록된다 (중복 리스너 없�
 
     expect(global.__chromeTestHelpers.listeners.onAlarm).toHaveLength(1);
 });
+
+test("SAVE_CONFIG 메시지를 받으면 storage에 저장하고 이후 GET_STATUS는 연결됨으로 응답한다", async () => {
+    require("./background.js");
+    const onMessage = getMessageListener();
+
+    const saveResult = await new Promise((resolve) => {
+        onMessage(
+            { type: "SAVE_CONFIG", deviceToken: "test-token", deviceId: 9, sessionId: null },
+            {},
+            resolve
+        );
+    });
+
+    expect(saveResult).toEqual({ success: true });
+    expect(global.__chromeTestHelpers.storageData.deviceToken).toBe("test-token");
+    expect(global.__chromeTestHelpers.storageData.deviceId).toBe(9);
+
+    const status = await new Promise((resolve) => {
+        onMessage({ type: "GET_STATUS" }, {}, resolve);
+    });
+
+    expect(status.isConnected).toBe(true);
+});

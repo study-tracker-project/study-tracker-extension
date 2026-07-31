@@ -65,4 +65,11 @@ test("구글 로그인 버튼 클릭 시 chrome.identity.getAuthToken으로 받�
             body: JSON.stringify({ accessToken: "fake-google-access-token" }),
         })
     );
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+        type: "SAVE_CONFIG",
+        deviceToken: "device-token",
+        deviceId: 1,
+        sessionId: null,
+    });
 });
