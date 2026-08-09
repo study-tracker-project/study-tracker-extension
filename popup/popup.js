@@ -1,4 +1,4 @@
-const SERVER_URL = "http://localhost:8080";
+const SERVER_URL = "https://api.studytracker.cloud";
 
 document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("googleLoginBtn").addEventListener("click", handleGoogleLogin);

@@ -73,3 +73,32 @@ test("구글 로그인 버튼 클릭 시 chrome.identity.getAuthToken으로 받�
         sessionId: null,
     });
 });
+
+test("구글 로그인 요청은 프로덕션 API 서버로 전송된다", async () => {
+    chrome.identity.getAuthToken.mockImplementation((options, callback) => {
+        callback("fake-google-access-token");
+    });
+
+    global.fetch
+        .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ accessToken: "app-access-token" }),
+        })
+        .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ deviceToken: "device-token", deviceId: 1 }),
+        });
+
+    require("./popup.js");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+
+    document.getElementById("googleLoginBtn").click();
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+
+    expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        "https://api.studytracker.cloud/api/auth/google/token",
+        expect.objectContaining({ method: "POST" })
+    );
+});

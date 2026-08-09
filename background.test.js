@@ -59,3 +59,19 @@ test("SAVE_CONFIG 메시지를 받으면 storage에 저장하고 이후 GET_STAT
 
     expect(status.isConnected).toBe(true);
 });
+
+test("세션 동기화는 프로덕션 API 서버로 요청을 보낸다", async () => {
+    await chrome.storage.local.set({ deviceToken: "device-token-123", sessionId: null, deviceId: 7 });
+
+    require("./background.js");
+    const onAlarm = global.__chromeTestHelpers.listeners.onAlarm[0];
+
+    await onAlarm({ name: "syncSession" });
+    await new Promise(process.nextTick);
+    await new Promise(process.nextTick);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+        "https://api.studytracker.cloud/api/sessions/active",
+        expect.anything()
+    );
+});

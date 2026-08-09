@@ -1,5 +1,5 @@
 // background.js
-const SERVER_URL = "http://localhost:8080";
+const SERVER_URL = "https://api.studytracker.cloud";
 
 // 탭 추적용 상태 (서비스워커 재시작 시 사라져도 무방 — 다음 탭 전환 때 다시 계산됨)
 let currentTab = null;
