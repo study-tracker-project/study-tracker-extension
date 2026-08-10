@@ -39,7 +39,6 @@
     .btn-primary { background: #1976d2; color: white; }
     .btn-secondary { background: #f5f5f5; color: #333; }
     .info { font-size: 11px; color: #666; margin-top: 8px; }
-    .error { color: #b71c1c; font-size: 11px; margin-bottom: 8px; }
   </style>
 </head>
 <body>
@@ -50,8 +49,10 @@
   </div>
 
   <div id="login-form">
-    <div id="error" class="error"></div>
-    <button class="btn-primary" id="googleLoginBtn">Google 계정으로 로그인</button>
+    <p class="info">웹(studytracker.cloud)에서 로그인하면 자동으로 연결됩니다.</p>
+    <a href="https://studytracker.cloud/login" target="_blank" rel="noopener">
+      <button class="btn-primary">웹에서 로그인하기</button>
+    </a>
   </div>
 
   <div id="connected-info" style="display:none">

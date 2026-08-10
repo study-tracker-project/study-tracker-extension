@@ -6,10 +6,7 @@ beforeEach(() => {
     jest.resetModules();
     document.body.innerHTML = `
         <div id="status" class="status"></div>
-        <div id="login-form">
-            <div id="error"></div>
-            <button id="googleLoginBtn"></button>
-        </div>
+        <div id="login-form"></div>
         <div id="connected-info" style="display:none">
             <button id="logoutBtn"></button>
         </div>
@@ -17,88 +14,36 @@ beforeEach(() => {
     `;
 
     global.chrome = {
-        identity: {
-            getAuthToken: jest.fn(),
-            removeCachedAuthToken: jest.fn((details, callback) => {
-                if (callback) callback();
-            }),
-        },
         runtime: {
-            sendMessage: jest.fn().mockResolvedValue({ success: true }),
-            lastError: null,
+            sendMessage: jest.fn().mockResolvedValue({ success: true, isConnected: false, sessionId: null, logCount: 0 }),
         },
         storage: {
             local: { clear: jest.fn().mockResolvedValue(undefined) },
         },
     };
-
-    global.fetch = jest.fn();
 });
 
-test("구글 로그인 버튼 클릭 시 chrome.identity.getAuthToken으로 받은 토큰을 백엔드로 전송한다", async () => {
-    chrome.identity.getAuthToken.mockImplementation((options, callback) => {
-        callback("fake-google-access-token");
-    });
+test("연결 안 됨 상태에서는 웹에서 로그인하면 자동 연결된다는 안내를 보여준다", async () => {
+    require("./popup.js");
+    document.dispatchEvent(new Event("DOMContentLoaded"));
+    await new Promise(process.nextTick);
 
-    global.fetch
-        .mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve({ accessToken: "app-access-token" }),
-        })
-        .mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve({ deviceToken: "device-token", deviceId: 1 }),
-        });
+    expect(document.getElementById("status").textContent).toBe("연결 안 됨 — 웹에서 로그인하면 자동으로 연결돼요");
+});
 
+test("로그아웃 버튼 클릭 시 storage를 비우고 background에 알린다", async () => {
     require("./popup.js");
     document.dispatchEvent(new Event("DOMContentLoaded"));
 
-    document.getElementById("googleLoginBtn").click();
+    document.getElementById("logoutBtn").click();
     await new Promise(process.nextTick);
     await new Promise(process.nextTick);
 
-    expect(global.fetch).toHaveBeenNthCalledWith(
-        1,
-        expect.stringContaining("/api/auth/google/token"),
-        expect.objectContaining({
-            method: "POST",
-            body: JSON.stringify({ accessToken: "fake-google-access-token" }),
-        })
-    );
-
+    expect(chrome.storage.local.clear).toHaveBeenCalled();
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
         type: "SAVE_CONFIG",
-        deviceToken: "device-token",
-        deviceId: 1,
+        deviceToken: null,
+        deviceId: null,
         sessionId: null,
     });
-});
-
-test("구글 로그인 요청은 프로덕션 API 서버로 전송된다", async () => {
-    chrome.identity.getAuthToken.mockImplementation((options, callback) => {
-        callback("fake-google-access-token");
-    });
-
-    global.fetch
-        .mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve({ accessToken: "app-access-token" }),
-        })
-        .mockResolvedValueOnce({
-            ok: true,
-            json: () => Promise.resolve({ deviceToken: "device-token", deviceId: 1 }),
-        });
-
-    require("./popup.js");
-    document.dispatchEvent(new Event("DOMContentLoaded"));
-
-    document.getElementById("googleLoginBtn").click();
-    await new Promise(process.nextTick);
-    await new Promise(process.nextTick);
-
-    expect(global.fetch).toHaveBeenNthCalledWith(
-        1,
-        "https://api.studytracker.cloud/api/auth/google/token",
-        expect.objectContaining({ method: "POST" })
-    );
 });

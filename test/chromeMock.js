@@ -3,16 +3,11 @@ const listeners = {
     onInstalled: [],
     onStartup: [],
     onMessage: [],
+    onMessageExternal: [],
     onAlarm: [],
 };
 
 global.chrome = {
-    identity: {
-        getAuthToken: (details, callback) => callback(undefined),
-        removeCachedAuthToken: (details, callback) => {
-            if (callback) callback();
-        },
-    },
     storage: {
         local: {
             get: (keys) =>
@@ -36,6 +31,7 @@ global.chrome = {
         onInstalled: { addListener: (fn) => listeners.onInstalled.push(fn) },
         onStartup: { addListener: (fn) => listeners.onStartup.push(fn) },
         onMessage: { addListener: (fn) => listeners.onMessage.push(fn) },
+        onMessageExternal: { addListener: (fn) => listeners.onMessageExternal.push(fn) },
     },
     alarms: {
         create: () => {},

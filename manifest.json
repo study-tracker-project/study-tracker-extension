@@ -1,23 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Study Tracker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "브라우저 사용 시간을 측정해서 순공 시간을 계산합니다",
 
   "permissions": [
     "tabs",
     "storage",
-    "alarms",
-    "identity"
+    "alarms"
   ],
 
   "host_permissions": [
     "https://api.studytracker.cloud/*"
   ],
 
-  "oauth2": {
-    "client_id": "755205800335-4u32ma0scurlmvtvc3rfce5qimlhp42p.apps.googleusercontent.com",
-    "scopes": ["openid", "email", "profile"]
+  "externally_connectable": {
+    "matches": ["https://studytracker.cloud/*"]
   },
 
   "background": {

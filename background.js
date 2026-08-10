@@ -175,6 +175,62 @@ async function sendBrowserLogs() {
     }
 }
 
+// ── 웹 → 확장 프로그램 자동 로그인 브릿지 ──────────────
+// studytracker.cloud에서 로그인하면(또는 로그인된 채로 페이지를 열면) 웹이
+// 이미 가진 accessToken을 확장 프로그램에 직접 전달해준다. 확장 프로그램은
+// 그 토큰으로 기기 등록만 하면 되므로 별도의 Google 로그인 절차가 필요 없다.
+// manifest.json의 externally_connectable이 studytracker.cloud로 발신처를
+// 제한하므로, 다른 출처의 페이지는 애초에 이 리스너에 메시지를 보낼 수 없다.
+
+async function registerDeviceWithAccessToken(accessToken) {
+    const deviceRes = await fetch(`${SERVER_URL}/api/auth/device`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({ deviceName: "Chrome Extension", deviceType: "PC" })
+    });
+
+    if (!deviceRes.ok) {
+        throw new Error("기기 등록 실패.");
+    }
+
+    const { deviceToken, deviceId } = await deviceRes.json();
+    await chrome.storage.local.set({ deviceToken, deviceId, sessionId: null });
+}
+
+const WEB_ORIGIN = "https://studytracker.cloud";
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => {
+    if (message.type === "WEB_LOGIN") {
+        // manifest.json의 externally_connectable이 이미 발신처를 studytracker.cloud로
+        // 제한하지만, 그 설정이 나중에 실수로 넓어지더라도(과거 content_scripts에
+        // <all_urls>를 넣었던 것처럼) 안전하도록 여기서도 한 번 더 확인한다.
+        if (sender.origin !== WEB_ORIGIN) {
+            sendResponse({ success: false, error: "허용되지 않은 출처입니다." });
+            return true;
+        }
+
+        // 웹은 로그인 성공 시 + 로그인된 채로 페이지를 열 때마다 이 메시지를 보낸다.
+        // 백엔드 /api/auth/device는 호출할 때마다 새 기기 row + 만료 없는 토큰을
+        // 발급하므로(멱등성 없음), 이미 연결돼 있으면 여기서 걸러 재등록을 막는다 —
+        // 안 그러면 웹을 열 때마다 영구 유효한 기기 토큰이 계속 쌓인다.
+        getConfig().then((config) => {
+            if (config.deviceToken) {
+                sendResponse({ success: true });
+                return;
+            }
+            registerDeviceWithAccessToken(message.accessToken)
+                .then(() => sendResponse({ success: true }))
+                .catch((e) => sendResponse({ success: false, error: e.message }));
+        });
+        return true;
+    }
+
+    return true;
+});
+
 // ── 팝업으로부터 메시지 수신 ──────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
