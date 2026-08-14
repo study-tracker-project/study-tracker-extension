@@ -76,8 +76,6 @@ test("세션 동기화는 프로덕션 API 서버로 요청을 보낸다", async
     );
 });
 
-// ── 웹 → 확장 프로그램 자동 로그인 브릿지 ──────────────
-
 const WEB_SENDER = { origin: "https://studytracker.cloud" };
 
 function getExternalMessageListener() {

@@ -1,4 +1,3 @@
-// background.js
 const SERVER_URL = "https://api.studytracker.cloud";
 
 // 탭 추적용 상태 (서비스워커 재시작 시 사라져도 무방 — 다음 탭 전환 때 다시 계산됨)
@@ -6,7 +5,6 @@ let currentTab = null;
 let tabStartTime = null;
 let browserLogs = [];
 
-// ── 설정 조회 ──────────────────────────────────────
 // MV3 서비스워커는 유휴 상태에서 언제든 종료됐다가 재시작될 수 있고,
 // 이때 onInstalled/onStartup은 발생하지 않는다. 그래서 deviceToken 등을
 // 모듈 변수에 캐싱하지 않고, 필요할 때마다 매번 storage에서 읽는다.
@@ -18,8 +16,6 @@ async function getConfig() {
         deviceId: data.deviceId || null,
     };
 }
-
-// ── 탭 추적 ──────────────────────────────────────
 
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const tab = await chrome.tabs.get(activeInfo.tabId);
@@ -82,8 +78,6 @@ function saveCurrentTabLog() {
     console.log(`[로그] ${domain} | ${durationSec}초 | 배치: ${browserLogs.length}개`);
 }
 
-// ── 알람 (1분마다 로그 전송 + 세션 동기화) ─────────────────
-
 chrome.alarms.create("sendLogs", { periodInMinutes: 1 });
 chrome.alarms.create("syncSession", { periodInMinutes: 1 });
 
@@ -121,8 +115,6 @@ async function syncActiveSession() {
     }
 }
 
-// ── 도메인 추출 ──────────────────────────────────
-
 function extractDomain(url) {
     try {
         const parsed = new URL(url);
@@ -135,8 +127,6 @@ function extractDomain(url) {
         return null;
     }
 }
-
-// ── 서버 전송 ─────────────────────────────────────
 
 async function sendBrowserLogs() {
     const config = await getConfig();
@@ -230,8 +220,6 @@ chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) => 
 
     return true;
 });
-
-// ── 팝업으로부터 메시지 수신 ──────────────────────
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "GET_STATUS") {
